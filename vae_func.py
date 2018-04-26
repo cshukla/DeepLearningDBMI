@@ -6,6 +6,13 @@ def vae(Y,loss=('gaussian','negbinom'),latent_dims=(10,50),hidden_layer_width=50
     hidden_layer_width: number of nodes in the intermediate layer
     nbshape: if loss is negbinom, what is the shape parameter
     """
+    #if loss=='gaussian':
+    #    Y = log2(1+Y/rowSums(Y)*1e6)
+    #    Y = scale_center(Y)
+    #elif loss=='bernoulli':
+    #   Y = int(Y>0)
+    #else: pass #Y=Y
+
     pass #insert code here
     #output:
     #latent variable coordinates: z_mean
