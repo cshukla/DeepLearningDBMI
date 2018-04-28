@@ -1,0 +1,63 @@
+# preprocessing of all datasets
+
+```{r}
+#library(Matrix)
+#library(SingleCellExperiment)
+library(Seurat)
+fp<-file.path
+```
+
+First, run the script `data_download.sh` to download all of the files into the data directory
+
+## CBMC
+
+* includes umi counts and protein markers
+* no class labels
+* compute distances based on proteins as "ground truth"
+* compare distances in gene expression reduced space
+
+Run script `dense2sparse.py` to convert the RNA count matrix from a dense to a sparse format that is less memory intensive.
+
+```{r}
+pth<-"data/cbmc"
+X<-read.csv(fp(pth,"GSE100866_CBMC_8K_13AB_10X-RNA_umi_sparse.csv"),header=TRUE) #slow, big file
+#m<-do.call("sparseMatrix",X) #too slow
+```
+```{r}
+#mouse, ERCC, human genes
+gn<-X$gene
+gc<-strsplit(gn,"_",fixed=TRUE)
+gc<-sapply(gc,function(x){x[[1]]})
+X$species<-gc
+```
+
+## PBMC
+
+run script `PBMC.R` to obtain metadata
+
+Follow instructions here to merge 8k and 4k datasets and perform quality control
+https://davetang.org/muse/2018/01/24/merging-two-10x-single-cell-datasets/
+
+```{r}
+pth<-"data/pbmc"
+pbmc4k<-readMM(file = fp(pth,"pbmc4k/matrix.mtx"))
+gnames<-read.table(fp(pth,"pbmc4k/genes.tsv"))
+rownames(pbmc4k)<-gnames[,1]
+cnames<-read.table(fp(pth,"pbmc4k","barcodes.tsv"))
+
+pbmc4k.data<-Read10X(data.dir=fp(pth,"pbmc4k"))
+pbmc4k<-CreateSeuratObject(raw.data=pbmc4k.data,project="PBMC4K")
+pbmc8k.data<-Read10X(data.dir=fp(pth,"pbmc8k"))
+pbmc8k<-CreateSeuratObject(raw.data=pbmc8k.data,project="PBMC8K")
+pbmc<-MergeSeurat(object1=pbmc4k, object2=pbmc8k, add.cell.id1="4K", add.cell.id2="8K", project="PBMC12K")
+gi<-read.csv("data/pbmc/gene_info.csv")
+gg<-gi$ENSG
+#subset by genes included in scvi
+m<-pbmc@raw.data
+m<-m[gg,]
+```
+
+## CORTEX
+
+
+

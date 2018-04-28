@@ -15,3 +15,14 @@ unzip data/pbmc/data.zip PBMC/* -d data/pbmc
 rm data/pbmc/data.zip
 mv data/pbmc/PBMC/* data/pbmc
 rmdir data/pbmc/PBMC
+wget -P data/pbmc http://cf.10xgenomics.com/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_filtered_gene_bc_matrices.tar.gz
+wget -P data/pbmc http://cf.10xgenomics.com/samples/cell-exp/2.1.0/pbmc4k/pbmc4k_filtered_gene_bc_matrices.tar.gz
+pushd data/pbmc
+tar -xzf pbmc8k_filtered_gene_bc_matrices.tar.gz
+mv filtered_gene_bc_matrices/GRCh38 pbmc8k
+rmdir filtered_gene_bc_matrices
+tar -xzf pbmc4k_filtered_gene_bc_matrices.tar.gz
+mv filtered_gene_bc_matrices/GRCh38 pbmc4k
+rmdir filtered_gene_bc_matrices
+rm pbmc*k_filtered_gene_bc_matrices.tar.gz
+popd
