@@ -1,10 +1,20 @@
 # preprocessing of all datasets
 
 ```{r}
-#library(Matrix)
+library(Matrix)
 #library(SingleCellExperiment)
-library(Seurat)
+#library(Seurat)
 fp<-file.path
+
+split2mat<-function(x,splt,cnames=NULL){
+  #takes a character vector x and string splits on 'splt" character
+  #builds a matrix with nrow=length(x) and ncol=number of substrings
+  #only works if each element of x has the splt character appearing same number of times
+  x<-strsplit(as.character(x),splt)
+  x<-t(matrix(unlist(x), nrow=length(x[[1]])))
+  if(!is.null(cnames)) colnames(x)<-cnames
+  x
+}
 ```
 
 First, run the script `data_download.sh` to download all of the files into the data directory
@@ -59,5 +69,47 @@ m<-m[gg,]
 
 ## CORTEX
 
+```{r}
+#loading/parsing
+pth<-"data/cortex"
+rna<-read.delim(fp(pth,"expression_mRNA_17-Aug-2014.txt"))
+cmeta<-as.data.frame(t(rna[1:9,3:ncol(rna)]))
+colnames(cmeta)<-gsub(" ","_",rna[1:9,2])
+colnames(cmeta)<-gsub("#","",colnames(cmeta))
+m<-as.matrix(rna[11:nrow(rna),3:ncol(rna)])
+m<-matrix(as.numeric(m),nrow=nrow(m))
+#m<-Matrix(as.numeric(m),dim(m)[1]) #sparse matrix
+cmeta$tissue<-gsub("\\.\\d+","",rownames(cmeta))
+rownames(cmeta)<-cmeta$cell_id
+colnames(m)<-rownames(cmeta)
+cmeta$plate<-factor(split2mat(cmeta$cell_id,"_")[,1])
+for(i in names(cmeta)){
+  names(cmeta[[i]])<-NULL
+}
+gmeta<-data.frame(gene_cluster=rna[11:nrow(rna),2])
+gmeta$gene_symbol<-rownames(gmeta)<-rna[11:nrow(rna),1]
+rownames(m)<-rownames(gmeta)
+#basic QC following Zeisel Supplement (p.5)
+good<-colSums(m)>2500 #filter cells
+m<-m[,good]; cmeta<-cmeta[good,]
+gg<-rowSums(m>0)>5
+gmeta<-gmeta[gg,]
+m<-m[gg,]
+gmu<-rowMeans(m)
+gvar<-apply(m,1,var)
+plot(log(gmu),log(gvar))
+abline(0,1,col="red",lty=2)
+curve(x+log1p(exp(x-1)),from=min(log(gmu)),to=max(log(gmu)),col="red",add=TRUE)
+#find top variable genes (top 2000)
+vgr<-order(log(gvar)-log(gmu),decreasing=TRUE)
+vgg<-rownames(m)[q[1:2000]]
+m<-m[vgg,]
+gmeta<-gmeta[vgg,]
+
+write.table(m,file=fp(pth,"cortex_expression.txt"),row.names=FALSE,col.names=FALSE)
+write.csv(gmeta,file=fp(pth,"gene_info.csv"),row.names=FALSE,quot=FALSE)
+write.csv(cmeta,file=fp(pth,"cell_info.csv"),row.names=FALSE,quot=FALSE)
+rm(rna)
+```
 
 
