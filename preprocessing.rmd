@@ -111,5 +111,11 @@ write.csv(gmeta,file=fp(pth,"gene_info.csv"),row.names=FALSE,quot=FALSE)
 write.csv(cmeta,file=fp(pth,"cell_info.csv"),row.names=FALSE,quot=FALSE)
 rm(rna)
 ```
+Zip up the files then upload to dropbox public folder
+```
+pushd data/cortex
+zip cortex.zip gene_info.csv cell_info.csv cortex_expression.txt
+popd
+```
 
 
