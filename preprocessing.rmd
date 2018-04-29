@@ -1,0 +1,121 @@
+# preprocessing of all datasets
+
+```{r}
+library(Matrix)
+#library(SingleCellExperiment)
+#library(Seurat)
+fp<-file.path
+
+split2mat<-function(x,splt,cnames=NULL){
+  #takes a character vector x and string splits on 'splt" character
+  #builds a matrix with nrow=length(x) and ncol=number of substrings
+  #only works if each element of x has the splt character appearing same number of times
+  x<-strsplit(as.character(x),splt)
+  x<-t(matrix(unlist(x), nrow=length(x[[1]])))
+  if(!is.null(cnames)) colnames(x)<-cnames
+  x
+}
+```
+
+First, run the script `data_download.sh` to download all of the files into the data directory
+
+## CBMC
+
+* includes umi counts and protein markers
+* no class labels
+* compute distances based on proteins as "ground truth"
+* compare distances in gene expression reduced space
+
+Run script `dense2sparse.py` to convert the RNA count matrix from a dense to a sparse format that is less memory intensive.
+
+```{r}
+pth<-"data/cbmc"
+X<-read.csv(fp(pth,"GSE100866_CBMC_8K_13AB_10X-RNA_umi_sparse.csv"),header=TRUE) #slow, big file
+#m<-do.call("sparseMatrix",X) #too slow
+```
+```{r}
+#mouse, ERCC, human genes
+gn<-X$gene
+gc<-strsplit(gn,"_",fixed=TRUE)
+gc<-sapply(gc,function(x){x[[1]]})
+X$species<-gc
+```
+
+## PBMC
+
+run script `PBMC.R` to obtain metadata
+
+Follow instructions here to merge 8k and 4k datasets and perform quality control
+https://davetang.org/muse/2018/01/24/merging-two-10x-single-cell-datasets/
+
+```{r}
+pth<-"data/pbmc"
+pbmc4k<-readMM(file = fp(pth,"pbmc4k/matrix.mtx"))
+gnames<-read.table(fp(pth,"pbmc4k/genes.tsv"))
+rownames(pbmc4k)<-gnames[,1]
+cnames<-read.table(fp(pth,"pbmc4k","barcodes.tsv"))
+
+pbmc4k.data<-Read10X(data.dir=fp(pth,"pbmc4k"))
+pbmc4k<-CreateSeuratObject(raw.data=pbmc4k.data,project="PBMC4K")
+pbmc8k.data<-Read10X(data.dir=fp(pth,"pbmc8k"))
+pbmc8k<-CreateSeuratObject(raw.data=pbmc8k.data,project="PBMC8K")
+pbmc<-MergeSeurat(object1=pbmc4k, object2=pbmc8k, add.cell.id1="4K", add.cell.id2="8K", project="PBMC12K")
+gi<-read.csv("data/pbmc/gene_info.csv")
+gg<-gi$ENSG
+#subset by genes included in scvi
+m<-pbmc@raw.data
+m<-m[gg,]
+```
+
+## CORTEX
+
+```{r}
+#loading/parsing
+pth<-"data/cortex"
+rna<-read.delim(fp(pth,"expression_mRNA_17-Aug-2014.txt"))
+cmeta<-as.data.frame(t(rna[1:9,3:ncol(rna)]))
+colnames(cmeta)<-gsub(" ","_",rna[1:9,2])
+colnames(cmeta)<-gsub("#","",colnames(cmeta))
+m<-as.matrix(rna[11:nrow(rna),3:ncol(rna)])
+m<-matrix(as.numeric(m),nrow=nrow(m))
+#m<-Matrix(as.numeric(m),dim(m)[1]) #sparse matrix
+cmeta$tissue<-gsub("\\.\\d+","",rownames(cmeta))
+rownames(cmeta)<-cmeta$cell_id
+colnames(m)<-rownames(cmeta)
+cmeta$plate<-factor(split2mat(cmeta$cell_id,"_")[,1])
+for(i in names(cmeta)){
+  names(cmeta[[i]])<-NULL
+}
+gmeta<-data.frame(gene_cluster=rna[11:nrow(rna),2])
+gmeta$gene_symbol<-rownames(gmeta)<-rna[11:nrow(rna),1]
+rownames(m)<-rownames(gmeta)
+#basic QC following Zeisel Supplement (p.5)
+good<-colSums(m)>2500 #filter cells
+m<-m[,good]; cmeta<-cmeta[good,]
+gg<-rowSums(m>0)>5
+gmeta<-gmeta[gg,]
+m<-m[gg,]
+gmu<-rowMeans(m)
+gvar<-apply(m,1,var)
+plot(log(gmu),log(gvar))
+abline(0,1,col="red",lty=2)
+curve(x+log1p(exp(x-1)),from=min(log(gmu)),to=max(log(gmu)),col="red",add=TRUE)
+#find top variable genes (top 2000)
+vgr<-order(log(gvar)-log(gmu),decreasing=TRUE)
+vgg<-rownames(m)[q[1:2000]]
+m<-m[vgg,]
+gmeta<-gmeta[vgg,]
+
+write.table(m,file=fp(pth,"cortex_expression.txt"),row.names=FALSE,col.names=FALSE)
+write.csv(gmeta,file=fp(pth,"gene_info.csv"),row.names=FALSE,quot=FALSE)
+write.csv(cmeta,file=fp(pth,"cell_info.csv"),row.names=FALSE,quot=FALSE)
+rm(rna)
+```
+Zip up the files then upload to dropbox public folder
+```
+pushd data/cortex
+zip cortex.zip gene_info.csv cell_info.csv cortex_expression.txt
+popd
+```
+
+
