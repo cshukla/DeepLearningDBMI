@@ -8,6 +8,7 @@ output: html_document
 PCA embeddings
 
 ```{r}
+library(ggplot2)
 ari<-mclust::adjustedRandIndex
 fp<-file.path
 labels<-read.csv("data/cortex/cell_info.csv")$level1class
@@ -60,8 +61,38 @@ res
 ```
 
 ```{r}
-library(ggplot2)
 ggplot(res,aes(x=latent_dimension,y=adj_rand_index,colour=loss,group=loss))+geom_line(size=2)+facet_wrap(~hidden_width)+theme_bw()
 dir.create("results/plots",recursive=TRUE)
 ggsave("results/plots/cortex_ari.pdf",width=6,height=4)
 ```
+
+visualize embeddings with tSNE
+```{r}
+#labels global variable
+f<-function(dname,labs=labels){
+  pd<-Rtsne::Rtsne(dat[[dname]],dims=2,pca=FALSE)$Y
+  colnames(pd)<-c("tsne1","tsne2")
+  pd<-cbind(as.data.frame(pd),celltype=labs)
+  pd$loss<-dname
+  pd
+}
+
+dat<-list()
+dat[['bernoulli']]<-as.matrix(read.table("embeddings/cortex/bernoulli_d50_h500.txt"))
+dat[['gaussian']]<-as.matrix(read.table("embeddings/cortex/gaussian_d50_h500.txt"))
+dat[['pca']]<-pca[,1:50]
+pd2<-do.call("rbind",lapply(names(dat),f))
+```
+```{r}
+ggplot(pd2,aes(x=tsne1,y=tsne2,colour=celltype))+facet_grid(loss~.,scales="free")+geom_point()+theme_bw()
+ggsave("results/plots/cortex_tsne.pdf",width=8,height=12)
+ggplot(pd2,aes(x=tsne1,y=tsne2,colour=celltype))+facet_grid(loss~.,scales="free")+geom_point()+theme_bw()+theme(legend.position="none")
+ggsave("results/plots/cortex_tsne_nolegend.pdf",width=6,height=12)
+```
+
+direct visualization
+```{r}
+pd3<-data.frame(pca[,1:2],loss="pca",celltype=labels)
+d<-read.table("embeddings/cortex/bernoulli_d2_h500.txt"
+```
+
