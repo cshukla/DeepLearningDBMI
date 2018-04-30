@@ -5,12 +5,38 @@ date: "4/30/2018"
 output: html_document
 ---
 
-First get the data from the ipython colab. Download the embeddings of cells for each hyperparam setting to embeddings/cortex.
+PCA embeddings
 
 ```{r}
 ari<-mclust::adjustedRandIndex
 fp<-file.path
 labels<-read.csv("data/cortex/cell_info.csv")$level1class
+```
+
+```{r}
+Y<-t(as.matrix(read.table("data/cortex/cortex_expression.txt"))) #ncells x ngenes
+Yl2<-log2(1+Y/rowSums(Y)*1e6)
+pca<-prcomp(Yl2,center=TRUE,scale=TRUE)$x
+```
+```{r}
+res_pca<-expand.grid(loss="pca",
+                     latent_dimension=c('10','50','100'),
+                     hidden_width=NA,
+                     adj_rand_index=NA)
+for(i in seq.int(nrow(res_pca))){
+  d<-as.integer(res_pca[i,"latent_dimension"])
+  cl<-NbClust::NbClust(pca[,1:d], method="ward.D2", index="ch", min.nc=nlevels(labels), max.nc=nlevels(labels))$Best.partition
+  res_pca[i,"adj_rand_index"]<-ari(labels,cl)
+}
+res_pca$hidden_width<-500
+res_pca2<-res_pca
+res_pca2$hidden_width<-800
+res_pca<-rbind(res_pca,res_pca2)
+```
+
+First get the data from the ipython colab. Download the embeddings of cells for each hyperparam setting to embeddings/cortex.
+
+```{r}
 pth<-"embeddings/cortex"
 #l<-"bernoulli"
 #d<-"100"
@@ -29,6 +55,7 @@ for(i in seq.int(nrow(res))){
 }
 dir.create("results/cortex",recursive=TRUE)
 write.csv(res,"results/cortex/ari.csv",quot=FALSE)
+res<-rbind(res,res_pca)
 res
 ```
 
