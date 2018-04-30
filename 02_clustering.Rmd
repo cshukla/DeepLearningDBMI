@@ -1,0 +1,33 @@
+---
+title: "Clustering"
+author: "Will Townes"
+date: "4/30/2018"
+output: html_document
+---
+
+First get the data from the ipython colab. Download the embeddings of cells for each hyperparam setting to embeddings/cortex.
+
+```{r}
+ari<-mclust::adjustedRandIndex
+fp<-file.path
+labels<-read.csv("data/cortex/cell_info.csv")$level1class
+pth<-"embeddings/cortex"
+#l<-"bernoulli"
+#d<-"100"
+#h<-"500"
+res<-expand.grid(loss=c("bernoulli","gaussian"),
+                 latent_dimension=c("10","50","100"),
+                 hidden_width=c("500","800"),
+                 adj_rand_index=NA)
+for(i in seq.int(nrow(res))){
+#i<-3
+  l<-res[i,"loss"]; d<-res[i,"latent_dimension"]; h<-res[i,"hidden_width"]
+  fname<-paste0(l,"_d",d,"_h",h)
+  d<-read.table(fp(pth,paste0(fname,".txt")))
+  cl<-NbClust::NbClust(d, method="ward.D2", index="ch", min.nc=nlevels(labels), max.nc=nlevels(labels))$Best.partition
+  res[i,"adj_rand_index"]<-ari(labels,cl)
+}
+dir.create("results/cortex",recursive=TRUE)
+write.csv(res,"results/cortex/ari.csv",quot=FALSE)
+res
+```
