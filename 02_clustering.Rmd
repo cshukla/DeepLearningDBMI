@@ -11,88 +11,69 @@ PCA embeddings
 library(ggplot2)
 ari<-mclust::adjustedRandIndex
 fp<-file.path
-labels<-read.csv("data/cortex/cell_info.csv")$level1class
-```
-
-```{r}
-Y<-t(as.matrix(read.table("data/cortex/cortex_expression.txt"))) #ncells x ngenes
-Yl2<-log2(1+Y/rowSums(Y)*1e6)
-pca<-prcomp(Yl2,center=TRUE,scale=TRUE)$x
-```
-```{r}
-res_pca<-expand.grid(loss="pca",
-                     latent_dimension=c('10','50','100'),
-                     hidden_width=NA,
-                     adj_rand_index=NA)
-for(i in seq.int(nrow(res_pca))){
-  d<-as.integer(res_pca[i,"latent_dimension"])
-  cl<-NbClust::NbClust(pca[,1:d], method="ward.D2", index="ch", min.nc=nlevels(labels), max.nc=nlevels(labels))$Best.partition
-  res_pca[i,"adj_rand_index"]<-ari(labels,cl)
-}
-res_pca$hidden_width<-500
-res_pca2<-res_pca
-res_pca2$hidden_width<-800
-res_pca<-rbind(res_pca,res_pca2)
 ```
 
 First get the data from the ipython colab. Download the embeddings of cells for each hyperparam setting to embeddings/cortex.
 
 ```{r}
-pth<-"embeddings/cortex"
-#l<-"bernoulli"
-#d<-"100"
-#h<-"500"
-res<-expand.grid(loss=c("bernoulli","gaussian"),
-                 latent_dimension=c("10","50","100"),
-                 hidden_width=c("500","800"),
-                 adj_rand_index=NA)
-for(i in seq.int(nrow(res))){
-#i<-3
-  l<-res[i,"loss"]; d<-res[i,"latent_dimension"]; h<-res[i,"hidden_width"]
-  fname<-paste0(l,"_d",d,"_h",h)
-  d<-read.table(fp(pth,paste0(fname,".txt")))
+clust2ari<-function(X_enc,labels){
+  #X_enc has samples in rows and features in cols
+  #runs hierarchical clustering and returns adjusted rand score compared to labels
+  stopifnot(nrow(X_enc)==length(labels))
   cl<-NbClust::NbClust(d, method="ward.D2", index="ch", min.nc=nlevels(labels), max.nc=nlevels(labels))$Best.partition
-  res[i,"adj_rand_index"]<-ari(labels,cl)
+  ari(labels,cl)
 }
-dir.create("results/cortex",recursive=TRUE)
-write.csv(res,"results/cortex/ari.csv",quot=FALSE)
-res<-rbind(res,res_pca)
-res
+
+dt<-"cortex"
+labels<-read.csv("data/cortex/cell_info.csv")$level1class
+
+dpth<-fp("data",dt,paste0(dt,"_expression.txt"))
+Y<-t(as.matrix(read.table(dpth))) #ncells x ngenes
+Yl2<-log2(1+Y/rowSums(Y)*1e6)
+pca<-prcomp(Yl2,center=TRUE,scale=TRUE)$x
+
+pth<-fp("embeddings",dt)
+opth<-fp("results",dt)
+
+model<-c("bernoulli","gaussian","poisson","negative_binomial","pca")
+nbshapes<-data.frame(a=c(.1,1,10),astr=c("01","1","10"))
+hnodes<-c("200","500")
+latent_dims<-c("2","10","50")
+
+#nonlinear except neg binom
+res1<-expand.grid(model=model[1:3], latent_dimension=latent_dims, hidden_width=hnodes, nbshape=NA, adj_rand_index=NA)
+#nonlinear neg binom
+res2<-expand.grid(model="negative_binomial", latent_dimension=latent_dims, hidden_width=hnodes, nbshape=nbshapes$astr, adj_rand_index=NA)
+#pca
+res3<-expand.grid(model="pca", latent_dimension=latent_dims, hidden_width=NA,nbshape=NA,adj_rand_index=NA)
+res<-rbind(res1,res2,res3)
+for(i in seq.int(nrow(res))){
+  l<-res[i,"model"]; d<-res[i,"latent_dimension"]; h<-res[i,"hidden_width"]
+  if(l=="negative_binomial"){
+    a<-res[i,"nbshape"]
+    fname<-paste0(l,a,"_d",d,"_h",h)
+  } else if(l!="pca"){
+    fname<-paste0(l,"_d",d,"_h",h)
+  }
+  if(l!="pca"){
+    d<-read.table(fp(pth,paste0(fname,".txt")))
+  } else {
+    d<-pca[,seq.int(as.integer(d))]
+  }
+  res[i,"adj_rand_index"]<-clust2ari(d,labels)
+}
+res$nbshape[res$nbshape=="01"]<-"0.1"
+res$dataset<-dt
+dir.create(opth,recursive=TRUE)
+write.csv(res,fp(opth,"ari.csv"))
 ```
 
 ```{r}
-ggplot(res,aes(x=latent_dimension,y=adj_rand_index,colour=loss,group=loss))+geom_line(size=2)+facet_wrap(~hidden_width)+theme_bw()
+res<-read.csv("results/cortex/ari.csv")
+ggplot(res,aes(x=model,y=adj_rand_index,fill=model))+geom_boxplot()+theme_bw()
+
+ggplot(res,aes(x=latent_dimension,y=adj_rand_index,fill=model))+geom_boxplot()+theme_bw()
+
 dir.create("results/plots",recursive=TRUE)
 ggsave("results/plots/cortex_ari.pdf",width=6,height=4)
 ```
-
-visualize embeddings with tSNE
-```{r}
-#labels global variable
-f<-function(dname,labs=labels){
-  pd<-Rtsne::Rtsne(dat[[dname]],dims=2,pca=FALSE)$Y
-  colnames(pd)<-c("tsne1","tsne2")
-  pd<-cbind(as.data.frame(pd),celltype=labs)
-  pd$loss<-dname
-  pd
-}
-
-dat<-list()
-dat[['bernoulli']]<-as.matrix(read.table("embeddings/cortex/bernoulli_d50_h500.txt"))
-dat[['gaussian']]<-as.matrix(read.table("embeddings/cortex/gaussian_d50_h500.txt"))
-dat[['pca']]<-pca[,1:50]
-pd2<-do.call("rbind",lapply(names(dat),f))
-```
-```{r}
-ggplot(pd2,aes(x=tsne1,y=tsne2,colour=celltype))+facet_grid(loss~.,scales="free")+geom_point()+theme_bw()
-ggsave("results/plots/cortex_tsne.pdf",width=8,height=12)
-ggplot(pd2,aes(x=tsne1,y=tsne2,colour=celltype))+facet_grid(loss~.,scales="free")+geom_point()+theme_bw()+theme(legend.position="none")
-ggsave("results/plots/cortex_tsne_nolegend.pdf",width=6,height=12)
-```
-
-direct visualization
-```{r}
-pd3<-data.frame(pca[,1:2],loss="pca",celltype=labels)
-d<-read.table("embeddings/cortex/bernoulli_d2_h500.txt"
-```
-
