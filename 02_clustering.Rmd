@@ -9,6 +9,7 @@ PCA embeddings
 
 ```{r}
 library(ggplot2)
+library(dplyr)
 ari<-mclust::adjustedRandIndex
 fp<-file.path
 ```
@@ -31,7 +32,9 @@ dpth<-fp("data",dt,paste0(dt,"_expression.txt"))
 Y<-t(as.matrix(read.table(dpth))) #ncells x ngenes
 Yl2<-log2(1+Y/rowSums(Y)*1e6)
 pca<-prcomp(Yl2,center=TRUE,scale=TRUE)$x
+```
 
+```{r}
 pth<-fp("embeddings",dt)
 opth<-fp("results",dt)
 
@@ -69,12 +72,49 @@ write.csv(res,fp(opth,"ari.csv"))
 ```
 
 ```{r}
+pth<-"results/plots"
+dir.create(pth,recursive=TRUE)
 res<-read.csv("results/cortex/ari.csv")
 res$latent_dims<-factor(res$latent_dimension,levels=c("2","10","50"))
-ggplot(res,aes(x=model,y=adj_rand_index,fill=latent_dims))+geom_boxplot()+theme_bw()+coord_flip()
+res$hidden_width<-factor(res$hidden_width)
+res$nbshape<-factor(res$nbshape)
+res$model_type<-"vae"
+res$model_type[res$model=="pca"]<-"pca"
 
-ggplot(res,aes(x=factor(latent_dimension),y=adj_rand_index,fill=model))+geom_boxplot()+theme_bw()
+#best loss func
+res$model<-reorder(res$model,res$adj_rand_index)
+ggplot(res,aes(x=model,y=adj_rand_index,fill=latent_dims))+geom_boxplot()+theme_bw()
+ggsave(fp(pth,"cortex_ari_vs_loss.png"),width=6,height=4)
 
-dir.create("results/plots",recursive=TRUE)
-ggsave("results/plots/cortex_ari.pdf",width=6,height=4)
+#res2<-subset(res,model!="negative_binomial")
+#res2nb<-subset(res,model=="negative_binomial") %>% group_by(hidden_width,latent_dims) %>% summarise(adj_rand_index
+
+#best hyperparameters
+ggplot(subset(res,latent_dims %in% c("10","50")),aes(x=model,y=adj_rand_index,fill=hidden_width))+geom_boxplot()+theme_bw()
+ggsave(fp(pth,"cortex_ari_vs_hidden_width.png"),width=6,height=3)
+
+#best nbshape
+ggplot(subset(res,model=="negative_binomial"),aes(x=latent_dims,y=adj_rand_index,colour=nbshape,group=nbshape))+geom_line(size=1.5)+facet_wrap(~hidden_width)+theme_bw()
+ggsave(fp(pth,"cortex_ari_vs_nbshape.png"),width=6,height=3)
+```
+visualize embeddings
+```{r}
+losses<-c("bernoulli","gaussian","negative_binomial1","poisson")
+f<-function(l){
+  fname<-paste0(l,"_d2_h500.txt")
+  d<-read.table(fp("embeddings/cortex",fname))
+  colnames(d)<-paste0("dim",c(1,2))
+  d$model<-l
+  d$cell_types<-labels
+  d
+}
+d<-lapply(losses,f)
+names(d)<-losses
+d$pca<-data.frame(pca[,1:2],model="pca",cell_types=labels)
+colnames(d$pca)[1:2]<-c("dim1","dim2")
+pd<-do.call("rbind",d)
+ggplot(pd,aes(x=dim1,y=dim2,colour=cell_types))+geom_point(size=.1)+facet_wrap(~model,scales="free")+theme_bw()+theme(legend.position = "none")
+ggsave("results/plots/cortex_2dvis_nolegend.png",width=6,height=3)
+ggplot(pd,aes(x=dim1,y=dim2,colour=cell_types))+geom_point(size=2)+facet_wrap(~model,scales="free")+theme_bw()
+ggsave("results/plots/cortex_2dvis_biglegend.png",width=6,height=3)
 ```
