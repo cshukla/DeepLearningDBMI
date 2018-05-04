@@ -70,9 +70,10 @@ write.csv(res,fp(opth,"ari.csv"))
 
 ```{r}
 res<-read.csv("results/cortex/ari.csv")
-ggplot(res,aes(x=model,y=adj_rand_index,fill=model))+geom_boxplot()+theme_bw()
+res$latent_dims<-factor(res$latent_dimension,levels=c("2","10","50"))
+ggplot(res,aes(x=model,y=adj_rand_index,fill=latent_dims))+geom_boxplot()+theme_bw()+coord_flip()
 
-ggplot(res,aes(x=latent_dimension,y=adj_rand_index,fill=model))+geom_boxplot()+theme_bw()
+ggplot(res,aes(x=factor(latent_dimension),y=adj_rand_index,fill=model))+geom_boxplot()+theme_bw()
 
 dir.create("results/plots",recursive=TRUE)
 ggsave("results/plots/cortex_ari.pdf",width=6,height=4)
